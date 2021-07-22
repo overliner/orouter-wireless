@@ -91,6 +91,20 @@ pub struct P2pMessage {
     data: Vec<u8>,
 }
 
+impl P2pMessage {
+    pub fn typ(&self) -> overline::MessageType {
+        self.typ.clone()
+    }
+
+    pub fn data_type(&self) -> u8 {
+        self.data_type
+    }
+
+    pub fn data(&self) -> &[u8] {
+        self.data.as_slice()
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Error {
     PoolFull,

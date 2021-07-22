@@ -1,0 +1,12 @@
+[package]
+name = "wireless-protocol"
+version = "0.1.0"
+authors = ["Adam Kloboucnik <adam@klob.cz>"]
+edition = "2018"
+license = "MIT"
+
+[dependencies]
+crc = "2.0.0"
+log = "0.4.14"
+overline-protocol = { path = "../protocol" }
+rand = { version = "0.7", default-features = false, features = ["small_rng"]}

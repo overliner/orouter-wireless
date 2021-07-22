@@ -9,10 +9,7 @@
 // * flush out unfinished messages from MessagePool after some time?
 // * - else what happens when a lost of unreceived parts blocks out the Pool for newer ones
 // * 7th message with 4th unmatching prefix comes in
-// * slicer CRC16 creation
-// * CRC16 at the end of P2pmessage - what does it check, whole message? only the data part?
 // * parts_vec could take Option<P2pMessagePart> for nicer api and lower alloc size with resize_default
-// * if message starts with 0xAA 0xAA -> single and has no header - can send up to 253B this way
 
 use std::collections::HashMap;
 

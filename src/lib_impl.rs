@@ -18,7 +18,7 @@ use rand::prelude::*;
 
 use overline_protocol::overline;
 
-/// P2pMessagePart represents raw chunk of data received using radio chip.
+/// crate::WirelessMessagePart represents raw chunk of data received using radio chip.
 /// It uses following structure:
 ///
 /// | name        | length in bytes | description                                            |
@@ -74,8 +74,7 @@ const HEADER_LENGTH: usize = MAGIC_BYTES_LENGTH
 
 const CRC_LENGTH: usize = 2;
 
-pub const MAX_LORA_MESSAGE_SIZE: usize = 255;
-pub type P2pMessagePart = Vec<u8>;
+pub type P2pMessagePart = crate::WirelessMessagePart;
 
 const MAX_P2P_MESSAGE_PART_COUNT: usize = u8::MAX as usize;
 const MAX_OVERLINE_MESSAGE_LENGTH: usize = 240 * MAX_P2P_MESSAGE_PART_COUNT;
@@ -262,7 +261,7 @@ impl MessagePool {
         log::trace!("after partnum > total_count check");
 
         // max data length can be (255-header length-2B CRC)
-        let max_length = MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH;
+        let max_length = crate::MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH;
         if *len as usize > max_length {
             return false;
         }
@@ -331,7 +330,7 @@ impl MessageSlicer {
         self.rng.fill(&mut prefix[0..3]);
 
         let mut res = vec![];
-        let chunks = data_bytes.chunks(MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH);
+        let chunks = data_bytes.chunks(crate::MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH);
         let total_count = chunks.len();
         let typ = message_type.into();
 
@@ -587,7 +586,9 @@ mod tests {
     fn test_slicer_two_parts() {
         let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d);
         let mut test_data_message = vec![];
-        for b in core::iter::repeat(0xff).take(MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH) {
+        for b in
+            core::iter::repeat(0xff).take(crate::MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH)
+        {
             test_data_message.push(b);
         }
         test_data_message.extend_from_slice(&[0xc0, 0xff, 0xee]); // this data should end up in the second part

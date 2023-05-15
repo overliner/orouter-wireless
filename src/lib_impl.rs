@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 
-use crc::{Crc, CRC_16_IBM_SDLC};
+use crc16::{State, X_25};
 use rand::prelude::*;
 
 use overline_protocol::overline;
@@ -121,19 +121,10 @@ pub enum Error {
 ///     ...
 ///     ...
 /// }
+#[derive(Default)]
 pub struct MessagePool {
     /// Contains parts of the raw P2pMessage. Parts are stored without the prefix
     incomplete_message_map: HashMap<Prefix, Vec<P2pMessagePart>>,
-    crc: Crc<u16>,
-}
-
-impl Default for MessagePool {
-    fn default() -> Self {
-        MessagePool {
-            crc: Crc::<u16>::new(&CRC_16_IBM_SDLC),
-            incomplete_message_map: Default::default(),
-        }
-    }
 }
 
 impl MessagePool {
@@ -281,7 +272,7 @@ impl MessagePool {
         let expected_crc = &msg[i..];
         let data = &msg[..i];
         log::trace!("expected_crc = {:02x?}, data = {:02x?}", expected_crc, data);
-        let actual_crc = self.crc.checksum(data);
+        let actual_crc = State::<X_25>::calculate(data);
         if actual_crc.to_be_bytes() != expected_crc {
             log::trace!(
                 "expected_crc = {:02x?}, actual_crc = {:02x?}",
@@ -302,14 +293,12 @@ impl MessagePool {
 /// back from received parts
 pub struct MessageSlicer {
     rng: SmallRng,
-    crc: Crc<u16>,
 }
 
 impl MessageSlicer {
     pub fn new(initial_seed: u64) -> Self {
         MessageSlicer {
             rng: SmallRng::seed_from_u64(initial_seed),
-            crc: Crc::<u16>::new(&CRC_16_IBM_SDLC),
         }
     }
 
@@ -348,7 +337,7 @@ impl MessageSlicer {
             p.push(typ);
             p.push(data_type);
             p.extend_from_slice(&part_bytes); // data
-            let crc = self.crc.checksum(p.as_slice());
+            let crc = State::<X_25>::calculate(p.as_slice());
             p.extend_from_slice(&crc.to_be_bytes()[..]);
             res.push(p);
         }

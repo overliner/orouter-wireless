@@ -16,8 +16,6 @@ use std::collections::HashMap;
 use crc16::{State, X_25};
 use rand::prelude::*;
 
-use overline_protocol::overline;
-
 /// crate::WirelessMessagePart represents raw chunk of data received using radio chip.
 /// It uses following structure:
 ///
@@ -85,13 +83,13 @@ const MAX_UNFINISHED_P2P_MESSAGE_COUNT: usize = u8::MAX as usize;
 /// message](../overline/enum.OverlineMessageType.html)
 #[derive(Debug, PartialEq)]
 pub struct P2pMessage {
-    typ: overline::MessageType,
+    typ: super::MessageType,
     data_type: u8,
     data: Vec<u8>,
 }
 
 impl P2pMessage {
-    pub fn typ(&self) -> overline::MessageType {
+    pub fn typ(&self) -> super::MessageType {
         self.typ.clone()
     }
 
@@ -305,7 +303,7 @@ impl MessageSlicer {
     pub fn slice(
         &mut self,
         data_bytes: &[u8],
-        message_type: overline::MessageType,
+        message_type: super::MessageType,
         data_type: u8,
     ) -> Result<Vec<P2pMessagePart>, Error> {
         // FIXME implement correct slicing - add typ, data_type, asemble hash from rnd and prefix,
@@ -348,6 +346,7 @@ impl MessageSlicer {
 
 #[cfg(test)]
 mod tests {
+    use super::super::MessageType;
     use super::*;
     #[test]
     fn test_pool_try_insert_1_of_1() {
@@ -467,7 +466,7 @@ mod tests {
         ];
         assert_eq!(
             Some(P2pMessage {
-                typ: overline::MessageType::Data,
+                typ: MessageType::Data,
                 data_type: 0x01,
                 data: [0xc0, 0xd0].to_vec()
             }),
@@ -546,7 +545,7 @@ mod tests {
     fn test_slicer_single_message() {
         let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d);
         let parts = s
-            .slice(&[0xc0, 0xff, 0xee], overline::MessageType::Data, 0x01)
+            .slice(&[0xc0, 0xff, 0xee], MessageType::Data, 0x01)
             .unwrap();
         assert_eq!(parts.len(), 1);
         assert_eq!(
@@ -563,7 +562,7 @@ mod tests {
         let mut p = MessagePool::default();
         assert_eq!(
             Some(P2pMessage {
-                typ: overline::MessageType::Data,
+                typ: MessageType::Data,
                 data_type: 0x01,
                 data: [0xc0, 0xff, 0xee].to_vec()
             }),
@@ -582,7 +581,7 @@ mod tests {
         }
         test_data_message.extend_from_slice(&[0xc0, 0xff, 0xee]); // this data should end up in the second part
         let parts = s
-            .slice(&test_data_message, overline::MessageType::Data, 0x01)
+            .slice(&test_data_message, MessageType::Data, 0x01)
             .unwrap();
         assert_eq!(parts.len(), 2);
         // TODO test part 1
@@ -606,7 +605,7 @@ mod tests {
         }
         assert_eq!(
             Err(Error::TooLong),
-            s.slice(&test_data_message, overline::MessageType::Other, 0x01)
+            s.slice(&test_data_message, MessageType::Other, 0x01)
         );
     }
 }

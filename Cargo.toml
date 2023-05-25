@@ -7,12 +7,12 @@ license = "MIT"
 
 [dependencies]
 crc16 = { version = "0.4.0", optional = true }
+defmt = { version = "0.3.2", optional = true }
 heapless = { version = "0.7", optional = true }
 log = { version = "0.4.14", optional = true }
-overline-protocol = { path = "../protocol", optional = true }
 rand = { version = "0.7", default-features = false, optional = true, features = ["small_rng"] }
 
 [features]
 default = ["std"]
-std = ["crc16", "log", "overline-protocol", "rand"]
-no_std = ["heapless"]
+std = ["crc16", "log", "rand"]
+no_std = ["heapless", "defmt"]

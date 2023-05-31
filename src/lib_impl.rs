@@ -16,62 +16,8 @@ use std::collections::HashMap;
 use crc16::{State, X_25};
 use rand::prelude::*;
 
-/// crate::WirelessMessagePart represents raw chunk of data received using radio chip.
-/// It uses following structure:
-///
-/// | name        | length in bytes | description                                            |
-/// |--:-:--------|--:-:------------|--:-:---------------------------------------------------|
-/// | magic bytes | 2               | magic bytes. always 0xAA 0xCC                          |
-/// | hash        | 6               | hash - first 3B are random, second 3B form a prefix grouping parts of the message to one            |
-/// | part_num    | 1               | part number 1, 2 or 3 (only 3-part messages supported) |
-/// | total_count | 1               | total count of messages with this prefix               |
-/// | length      | 1               | length of data                                         |
-/// | msg type    | 1               | overline message type                                  |
-/// | data type   | 1               | byte identifying data type, if previous field is data  |
-/// | data        | 1 - 240         | actual data                                            |
-/// | CRC16       | 2               | CRC16 of the whole message (header + data)             |
-
-const MAGIC_BYTES: [u8; 2] = [0xAA, 0xCC];
-const MAGIC_BYTES_LENGTH: usize = MAGIC_BYTES.len();
-const MAGIC_BYTES_IDX: usize = 0;
-
-const HASH_RND_PART_LENGTH: usize = 3;
-const HASH_RND_PART_IDX: usize = MAGIC_BYTES_IDX + MAGIC_BYTES_LENGTH; // 0 + 2 = 2
-type RndPart = Vec<u8>;
-
-const PREFIX_LENGTH: usize = 3;
-const PREFIX_IDX: usize = HASH_RND_PART_IDX + HASH_RND_PART_LENGTH; // 2 + 3 = 5
 type Prefix = Vec<u8>;
-
-/// HASH_* describe the full hash as used in [overline store](
-const HASH_LENGTH: usize = HASH_RND_PART_LENGTH + PREFIX_LENGTH;
-const HASH_IDX: usize = MAGIC_BYTES_IDX + MAGIC_BYTES_LENGTH; // 0 + 2 = 2
-
-const PART_NUMBER_LENGTH: usize = 1;
-const PART_NUMBER_IDX: usize = HASH_IDX + HASH_LENGTH; // 2 + 6 = 8
-
-const TOTAL_COUNT_LENGTH: usize = 1;
-const TOTAL_COUNT_IDX: usize = PART_NUMBER_IDX + PART_NUMBER_LENGTH; // 8 + 1 = 9
-
-const LENGTH_LENGTH: usize = 1;
-const LENGTH_IDX: usize = TOTAL_COUNT_IDX + TOTAL_COUNT_LENGTH; // 9 + 1 = 10
-
-const MSG_TYPE_LENGTH: usize = 1;
-const MSG_TYPE_IDX: usize = LENGTH_IDX + LENGTH_LENGTH; // 10 + 1 = 11;
-
-const DATA_TYPE_LENGTH: usize = 1;
-const DATA_TYPE_IDX: usize = MSG_TYPE_IDX + MSG_TYPE_LENGTH; // 11 + 1 = 12;
-
-const HEADER_LENGTH: usize = MAGIC_BYTES_LENGTH
-    + HASH_LENGTH
-    + PART_NUMBER_LENGTH
-    + TOTAL_COUNT_LENGTH
-    + LENGTH_LENGTH
-    + MSG_TYPE_LENGTH
-    + DATA_TYPE_LENGTH; // 13
-
-const CRC_LENGTH: usize = 2;
-
+type RndPart = Vec<u8>;
 pub type P2pMessagePart = crate::WirelessMessagePart;
 
 const MAX_P2P_MESSAGE_PART_COUNT: usize = u8::MAX as usize;
@@ -129,22 +75,22 @@ impl MessagePool {
     /// Try insert another part of sliced message. Will return None if this is not last (or the
     /// only) message, else it will return just the data of this message
     pub fn try_insert(&mut self, msg: P2pMessagePart) -> Result<Option<P2pMessage>, Error> {
-        if !self.is_valid_message(&msg) {
+        if crate::is_valid_message(&msg).is_err() {
             return Err(Error::MalformedMessage);
         }
 
-        let part_num = &msg[PART_NUMBER_IDX];
-        let total_count = &msg[TOTAL_COUNT_IDX];
-        let len = msg[LENGTH_IDX] as usize;
-        let typ = msg[MSG_TYPE_IDX];
-        let data_type = msg[DATA_TYPE_IDX];
+        let part_num = &msg[crate::PART_NUMBER_IDX];
+        let total_count = &msg[crate::TOTAL_COUNT_IDX];
+        let len = msg[crate::LENGTH_IDX] as usize;
+        let typ = msg[crate::MSG_TYPE_IDX];
+        let data_type = msg[crate::DATA_TYPE_IDX];
 
         // if this is part #1 of total count = 1, return immediately
         if *part_num == 1 as u8 && *total_count == 1 as u8 {
             return Ok(Some(P2pMessage {
                 typ: typ.into(),
                 data_type,
-                data: msg[HEADER_LENGTH..HEADER_LENGTH + len].to_vec(),
+                data: msg[crate::HEADER_LENGTH..crate::HEADER_LENGTH + len].to_vec(),
             }));
         }
 
@@ -154,7 +100,7 @@ impl MessagePool {
             total_count
         );
 
-        let prefix = msg[PREFIX_IDX..PREFIX_IDX + PREFIX_LENGTH].to_vec();
+        let prefix = msg[crate::PREFIX_IDX..crate::PREFIX_IDX + crate::PREFIX_LENGTH].to_vec();
 
         log::trace!("prefix = {:02x?}", prefix);
         // get the parts vec
@@ -179,12 +125,14 @@ impl MessagePool {
         match parts_vec.get(parts_index as usize) {
             Some(part) if !part.is_empty() => {} // we already have this message part, not a problem
             Some(_) => {
-                parts_vec[parts_index as usize] = msg[HEADER_LENGTH..HEADER_LENGTH + len].to_vec();
+                parts_vec[parts_index as usize] =
+                    msg[crate::HEADER_LENGTH..crate::HEADER_LENGTH + len].to_vec();
             }
             None => {
                 // lets insert the message
                 parts_vec.resize(parts_index as usize + 1, vec![]);
-                parts_vec[parts_index as usize] = msg[HEADER_LENGTH..HEADER_LENGTH + len].to_vec();
+                parts_vec[parts_index as usize] =
+                    msg[crate::HEADER_LENGTH..crate::HEADER_LENGTH + len].to_vec();
             }
         }
 
@@ -227,62 +175,6 @@ impl MessagePool {
         self.incomplete_message_map.clear();
     }
 
-    pub(crate) fn is_valid_message(&self, msg: &[u8]) -> bool {
-        // HEADER + 1B data + 2B CRC16
-        if msg.len() < HEADER_LENGTH + 1 + CRC_LENGTH {
-            return false;
-        }
-        log::trace!("after min len");
-
-        let magic_bytes = &msg[MAGIC_BYTES_IDX..MAGIC_BYTES_LENGTH];
-        if magic_bytes != MAGIC_BYTES {
-            return false;
-        }
-        log::trace!("after magic bytes");
-
-        let len = &msg[LENGTH_IDX];
-        let part_num = &msg[PART_NUMBER_IDX];
-        let total_count = &msg[TOTAL_COUNT_IDX];
-
-        if *part_num > *total_count {
-            return false;
-        }
-        log::trace!("after partnum > total_count check");
-
-        // max data length can be (255-header length-2B CRC)
-        let max_length = crate::MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH;
-        if *len as usize > max_length {
-            return false;
-        }
-        log::trace!("after max len");
-
-        // claimed len is different from actual remaining data bytes
-        if *len as usize != msg.len() - HEADER_LENGTH - CRC_LENGTH {
-            return false;
-        }
-
-        log::trace!("after actual len check");
-
-        // check crc
-        // [0, 1, 2, 3, 4]
-        let i = msg.len() - 2;
-        log::trace!("i = {}", i);
-        let expected_crc = &msg[i..];
-        let data = &msg[..i];
-        log::trace!("expected_crc = {:02x?}, data = {:02x?}", expected_crc, data);
-        let actual_crc = State::<X_25>::calculate(data);
-        if actual_crc.to_be_bytes() != expected_crc {
-            log::trace!(
-                "expected_crc = {:02x?}, actual_crc = {:02x?}",
-                expected_crc,
-                actual_crc.to_be_bytes()
-            );
-            return false;
-        }
-
-        true
-    }
-
     // pub(crate) fn data_to_p2p_message(data: Vec<u8>) -> P2pMessage {}
 }
 
@@ -317,7 +209,8 @@ impl MessageSlicer {
         self.rng.fill(&mut prefix[0..3]);
 
         let mut res = vec![];
-        let chunks = data_bytes.chunks(crate::MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH);
+        let chunks = data_bytes
+            .chunks(crate::MAX_LORA_MESSAGE_SIZE - crate::HEADER_LENGTH - crate::CRC_LENGTH);
         let total_count = chunks.len();
         let typ = message_type.into();
 
@@ -326,7 +219,7 @@ impl MessageSlicer {
             rnd_part.resize(3, 0);
             self.rng.fill(&mut rnd_part[0..3]);
             let mut p = P2pMessagePart::new();
-            p.extend_from_slice(&MAGIC_BYTES);
+            p.extend_from_slice(&crate::MAGIC_BYTES);
             p.extend_from_slice(&rnd_part);
             p.extend_from_slice(&prefix);
             p.push(i as u8 + 1); // part_num
@@ -508,40 +401,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_valid_message_missing_magic_bytes() {
-        let p = MessagePool::default();
-        //                             hash                             | num | tot | len | data
-        assert!(!p.is_valid_message(&[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x04, 0x01, 0x02]));
-    }
-
-    #[test]
-    fn test_is_valid_message_shorter_than_possible() {
-        let p = MessagePool::default();
-        //                             prefix               | num | tot | len | data
-        assert!(!p.is_valid_message(&[0xff, 0xff, 0xff, 0xff, 0x04, 0x01, 0x02]));
-    }
-
-    #[test]
-    fn test_is_valid_message_wrong_num() {
-        let p = MessagePool::default();
-        assert!(!p.is_valid_message(&[
-            // magic   | hash                             | num | tot | len | typ  |dtyp| data
-            0xAA, 0xCC, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02, 0x01, 0x02, 0x01, 0x01, 0xff,
-            0xff, 0x4b, 0x8c // crc16
-        ]));
-    }
-
-    #[test]
-    fn test_is_valid_message_wrong_len() {
-        let p = MessagePool::default();
-        assert!(!p.is_valid_message(&[
-            // magic   | hash                             | num | tot | len | typ  |dtyp| data
-            0xAA, 0xCC, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff,
-            0xff, 0xfe, 0x2e // crc16
-        ]));
-    }
-
-    #[test]
     fn test_slicer_single_message() {
         let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d);
         let parts = s
@@ -574,8 +433,8 @@ mod tests {
     fn test_slicer_two_parts() {
         let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d);
         let mut test_data_message = vec![];
-        for b in
-            core::iter::repeat(0xff).take(crate::MAX_LORA_MESSAGE_SIZE - HEADER_LENGTH - CRC_LENGTH)
+        for b in core::iter::repeat(0xff)
+            .take(crate::MAX_LORA_MESSAGE_SIZE - crate::HEADER_LENGTH - crate::CRC_LENGTH)
         {
             test_data_message.push(b);
         }

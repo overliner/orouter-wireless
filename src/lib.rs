@@ -41,7 +41,7 @@ const LENGTH_LENGTH: usize = 1;
 const LENGTH_IDX: usize = TOTAL_COUNT_IDX + TOTAL_COUNT_LENGTH; // 9 + 1 = 10
 
 const MSG_TYPE_LENGTH: usize = 1;
-const MSG_TYPE_IDX: usize = LENGTH_IDX + LENGTH_LENGTH; // 10 + 1 = 11;
+pub const MSG_TYPE_IDX: usize = LENGTH_IDX + LENGTH_LENGTH; // 10 + 1 = 11;
 
 const DATA_TYPE_LENGTH: usize = 1;
 const DATA_TYPE_IDX: usize = MSG_TYPE_IDX + MSG_TYPE_LENGTH; // 11 + 1 = 12;

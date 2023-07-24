@@ -18,33 +18,33 @@ use crc16::{State, X_25};
 /// | CRC16       | 2               | CRC16 of the whole message (header + data)             |
 
 const MAGIC_BYTES: [u8; 2] = [0xAA, 0xCC];
-const MAGIC_BYTES_LENGTH: usize = MAGIC_BYTES.len();
 const MAGIC_BYTES_IDX: usize = 0;
+const MAGIC_BYTES_LENGTH: usize = MAGIC_BYTES.len();
 
-const HASH_RND_PART_LENGTH: usize = 3;
 const HASH_RND_PART_IDX: usize = MAGIC_BYTES_IDX + MAGIC_BYTES_LENGTH; // 0 + 2 = 2
+const HASH_RND_PART_LENGTH: usize = 3;
 
-const PREFIX_LENGTH: usize = 3;
 const PREFIX_IDX: usize = HASH_RND_PART_IDX + HASH_RND_PART_LENGTH; // 2 + 3 = 5
+const PREFIX_LENGTH: usize = 3;
 
 /// HASH_* describe the full hash as used in [overline store](
-const HASH_LENGTH: usize = HASH_RND_PART_LENGTH + PREFIX_LENGTH;
 const HASH_IDX: usize = MAGIC_BYTES_IDX + MAGIC_BYTES_LENGTH; // 0 + 2 = 2
+const HASH_LENGTH: usize = HASH_RND_PART_LENGTH + PREFIX_LENGTH;
 
-const PART_NUMBER_LENGTH: usize = 1;
 const PART_NUMBER_IDX: usize = HASH_IDX + HASH_LENGTH; // 2 + 6 = 8
+const PART_NUMBER_LENGTH: usize = 1;
 
-const TOTAL_COUNT_LENGTH: usize = 1;
 const TOTAL_COUNT_IDX: usize = PART_NUMBER_IDX + PART_NUMBER_LENGTH; // 8 + 1 = 9
+const TOTAL_COUNT_LENGTH: usize = 1;
 
-const LENGTH_LENGTH: usize = 1;
 const LENGTH_IDX: usize = TOTAL_COUNT_IDX + TOTAL_COUNT_LENGTH; // 9 + 1 = 10
+const LENGTH_LENGTH: usize = 1;
 
-const MSG_TYPE_LENGTH: usize = 1;
 pub const MSG_TYPE_IDX: usize = LENGTH_IDX + LENGTH_LENGTH; // 10 + 1 = 11;
+const MSG_TYPE_LENGTH: usize = 1;
 
-const DATA_TYPE_LENGTH: usize = 1;
 const DATA_TYPE_IDX: usize = MSG_TYPE_IDX + MSG_TYPE_LENGTH; // 11 + 1 = 12;
+const DATA_TYPE_LENGTH: usize = 1;
 
 const HEADER_LENGTH: usize = MAGIC_BYTES_LENGTH
     + HASH_LENGTH
@@ -154,7 +154,7 @@ pub fn is_valid_message(msg: &[u8]) -> Result<(), ValidationError> {
 
     // check crc
     // [0, 1, 2, 3, 4]
-    let i = msg.len() - 2;
+    let i = msg.len() - CRC_LENGTH;
     let expected_crc = &msg[i..];
     let data = &msg[..i];
     let actual_crc = State::<X_25>::calculate(data);

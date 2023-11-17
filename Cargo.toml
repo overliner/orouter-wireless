@@ -5,10 +5,19 @@ authors = ["Adam Kloboucnik <adam@klob.cz>"]
 edition = "2018"
 license = "MIT"
 
+[[bin]]
+name = "print_sample"
+path = "src/bin/print_sample.rs"
+required-features = ["std", "clap", "anyhow", "base64", "hex"]
+
 [dependencies]
+anyhow = { version = "1.0.75", optional = true }
+base64 = { version = "0.21.4", optional = true }
+clap = { version = "4.4.6", optional = true, features = ["derive"] }
 crc16 = { version = "0.4.0" }
 defmt = { version = "0.3.2", optional = true }
 heapless = { version = "0.7", optional = true }
+hex = { version = "0.4.3", optional = true }
 log = { version = "0.4.14", optional = true }
 rand = { version = "0.7", default-features = false, optional = true, features = ["small_rng"] }
 

@@ -330,6 +330,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "546c37ac5d9e56f55e73b677106873d9d9f5190605e41a856503623648488cae"
 
 [[package]]
+name = "orouter-wireless"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64",
+ "clap",
+ "crc16",
+ "defmt",
+ "heapless",
+ "hex",
+ "log",
+ "rand",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -673,18 +688,3 @@ name = "windows_x86_64_msvc"
 version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
-
-[[package]]
-name = "wireless-protocol"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64",
- "clap",
- "crc16",
- "defmt",
- "heapless",
- "hex",
- "log",
- "rand",
-]

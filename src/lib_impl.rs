@@ -1,10 +1,3 @@
-//! Defines and implements protocol used on physical radio layer (now using LoRa)
-//!
-//! Logical [crate::overline::OverlineMessage] length can be [crate::overline::MaxLoraPayloadLength](255 B), but LoRa can only transmit 255B in
-//! one message. MessageSlicer takes care of splitting message to appropriate number of parts with
-//! necessary header information. On the receiving end these has to be assembled back to a logical
-//! message - this is job of MessagePool
-//
 // TODO Remaining tasks from .plan
 // * flush out unfinished messages from MessagePool after some time?
 // * - else what happens when a lost of unreceived parts blocks out the Pool for newer ones
@@ -56,15 +49,17 @@ pub enum Error {
 }
 
 /// Holds parts of multipart messages before all parts have arrived
-/// Maximum of 3 different sets of incomplete messages can be stored
 ///
 /// Messages in vector under each prefix key are inserted at the correct index - are kept sorted
 /// example of the map
+///
+/// ```ignore
 /// {
 ///     '3B prefix': \[\[part_1\], \[part_2\], \[part3\]\], // these are ordered
 ///     ...
 ///     ...
 /// }
+/// ```
 #[derive(Default)]
 pub struct MessagePool {
     /// Contains parts of the raw P2pMessage. Parts are stored without the prefix
@@ -72,8 +67,9 @@ pub struct MessagePool {
 }
 
 impl MessagePool {
-    /// Try insert another part of sliced message. Will return None if this is not last (or the
-    /// only) message, else it will return just the data of this message
+    /// Try insert another part of sliced message. Will return `None` if this is not last (or the
+    /// only) message, else it will return just the data of this message (stripped of all the now
+    /// unnecessart protocol meta data)
     pub fn try_insert(&mut self, msg: P2pMessagePart) -> Result<Option<P2pMessage>, Error> {
         if crate::is_valid_message(&msg).is_err() {
             return Err(Error::MalformedMessage);
@@ -157,6 +153,8 @@ impl MessagePool {
         Ok(None)
     }
 
+    /// Returns how many message parts (regardless of which message is the part of) are currently
+    /// being held by the internal state.
     pub fn size(&self) -> u8 {
         let mut size: u8 = 0;
 
@@ -171,6 +169,8 @@ impl MessagePool {
         size
     }
 
+    /// Resets the internal state of the pool. This equals constructing of a new pool - all the
+    /// message parts of unfinished messages inserted before calling of this method will be lost.
     pub fn reset(&mut self) {
         self.incomplete_message_map.clear();
     }
@@ -178,20 +178,23 @@ impl MessagePool {
     // pub(crate) fn data_to_p2p_message(data: Vec<u8>) -> P2pMessage {}
 }
 
-/// Takes care of splitting OVerline logical chunks of data [TODO link to Overline message]() to
-/// chunks transmittable using LoRa with a header allowing receiver to assemble the logical message
-/// back from received parts
+/// Takes care of splitting a lengh-wise theoretically unlimited message into to
+/// chunks transmittable using oRouter with a header allowing receiver to assemble the logical message
+/// back from received parts (using [`crate::MessagePool`]).
 pub struct MessageSlicer {
     rng: SmallRng,
 }
 
 impl MessageSlicer {
+    /// `initial_seed` is a seed for rng for generating slice prefixes. Generate this using a
+    /// system source of randomness
     pub fn new(initial_seed: u64) -> Self {
         MessageSlicer {
             rng: SmallRng::seed_from_u64(initial_seed),
         }
     }
 
+    /// splits `data_bytes` to wireless message parts
     pub fn slice(
         &mut self,
         data_bytes: &[u8],

@@ -1,27 +1,31 @@
 [package]
-name = "wireless-protocol"
+name = "orouter-wireless"
+description = "Implementation of wireless protocol for Overline network"
 version = "0.1.0"
 authors = ["Adam Kloboucnik <adam@klob.cz>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 
 [[bin]]
 name = "print_sample"
 path = "src/bin/print_sample.rs"
-required-features = ["std", "clap", "anyhow", "base64", "hex"]
+required-features = ["__internal_binary"]
 
 [dependencies]
+crc16 = { version = "0.4.0" }
+defmt = { version = "0.3.2", optional = true }
+rand = { version = "0.7", default-features = false, optional = true, features = ["small_rng"] }
+log = { version = "0.4.14", optional = true }
+heapless = { version = "0.7", optional = true }
+
+# following dependencies are only needed for the binary to build
 anyhow = { version = "1.0.75", optional = true }
 base64 = { version = "0.21.4", optional = true }
 clap = { version = "4.4.6", optional = true, features = ["derive"] }
-crc16 = { version = "0.4.0" }
-defmt = { version = "0.3.2", optional = true }
-heapless = { version = "0.7", optional = true }
 hex = { version = "0.4.3", optional = true }
-log = { version = "0.4.14", optional = true }
-rand = { version = "0.7", default-features = false, optional = true, features = ["small_rng"] }
 
 [features]
 default = ["std"]
 std = ["log", "rand"]
+__internal_binary = ["clap", "anyhow", "base64", "hex"]
 no_std = ["heapless", "defmt"]

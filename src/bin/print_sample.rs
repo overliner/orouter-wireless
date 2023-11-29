@@ -63,9 +63,9 @@ fn main() -> Result<()> {
         } => {
             println!("original data = {:?}", data);
             let data = if *input_hex { todo!() } else { data.as_bytes() };
-            let mut slicer = wireless_protocol::MessageSlicer::new(*seed);
+            let mut slicer = orouter_wireless::MessageSlicer::new(*seed);
             let messages = slicer
-                .slice(data, wireless_protocol::MessageType::Data, 0x01)
+                .slice(data, orouter_wireless::MessageType::Data, 0x01)
                 .map_err(|e| anyhow::anyhow!("{:?}", e))
                 .context("Could not slice message")?;
             println!("slices: \n");

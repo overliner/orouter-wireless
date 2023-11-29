@@ -1,0 +1,62 @@
+name: Build and run unit tests
+
+on:
+  push:
+    branches:
+      - '**'
+    tags:
+      - v*
+
+jobs:
+  build-and-test:
+    if: "!contains(github.event.head_commit.message, 'skip ci')"
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v1
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Formatting check
+      run: cargo fmt -- --check
+
+    - name: Generate Cargo.lock
+      uses: actions-rs/cargo@v1
+      with:
+        command: generate-lockfile
+        # this has to be here because of bug in actions-rs/cargo (see https://github.com/actions-rs/cargo/issues/86)
+        args: --manifest-path Cargo.toml
+
+    - name: Cache cargo registry and index
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          # target/
+        key: cargo-${{ hashFiles('Cargo.lock') }}
+
+    - name: test orouter-wireless
+      run: cargo test
+
+    - name: build print_sample utility binary
+      run: cargo build --bin print_sample --features=__internal_binary
+
+  notify_failure:
+      needs: [build-and-test]
+      if: ${{ failure() }}
+      runs-on: ubuntu-latest
+      steps:
+      - name: Notify telegram if job failed
+        uses: Lukasss93/telegram-action@v2
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.BC_DEV_BOT_TOKEN }}
+          TELEGRAM_CHAT: ${{ secrets.BC_CORE_CHAT_ID }}
+        with:
+          release_template: ./.github/workflows/release_failure_templates.mustache
+          status: 'failure'

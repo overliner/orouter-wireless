@@ -15,26 +15,26 @@
 //! [`crate::WirelessMessagePart`] represents raw chunk of data transmitted/received using oRouters
 //! radio chip. This crate implements and uses following scheme for message part:
 //!
-//! | name        | length in bytes | description                                                                               |
-//! |-------------|-----------------|-------------------------------------------------------------------------------------------|
-//! | magic bytes | 2               | magic bytes. always 0xAA 0xCC (will be configurable in next release)                      |
-//! | hash        | 6               | hash - first 3B are random, second 3B form a prefix grouping parts of the message to one  |
-//! | part_num    | 1               | part number 1, 2 or 3 (only 3-part messages supported)                                    |
-//! | total_count | 1               | total count of messages with this prefix                                                  |
-//! | length      | 1               | length of data                                                                            |
-//! | msg type    | 1               | overline message type                                                                     |
-//! | data type   | 1               | byte identifying data type, if previous field is data                                     |
-//! | data        | 1 - 240         | actual data                                                                               |
-//! | CRC16       | 2               | CRC16 of the whole message (header + data)                                                |
+//! | name          | length in bytes | description                                                                               |
+//! |---------------|-----------------|-------------------------------------------------------------------------------------------|
+//! | network bytes | 2               | network bytes. always 0xAA 0xCC (will be configurable in next release)                      |
+//! | hash          | 6               | hash - first 3B are random, second 3B form a prefix grouping parts of the message to one  |
+//! | part_num      | 1               | part number 1, 2 or 3 (only 3-part messages supported)                                    |
+//! | total_count   | 1               | total count of messages with this prefix                                                  |
+//! | length        | 1               | length of data                                                                            |
+//! | msg type      | 1               | overline message type                                                                     |
+//! | data type     | 1               | byte identifying data type, if previous field is data                                     |
+//! | data          | 1 - 240         | actual data                                                                               |
+//! | CRC16         | 2               | CRC16 of the whole message (header + data)                                                |
 //!
 //! Example of using a [`crate::MessageSlicer`] to split some data for wireless transmission:
 //!
 //! ```rust,no_run
-//! use orouter_wireless::{MessageSlicer, MessageType};
+//! use orouter_wireless::{MessageSlicer, MessageType, network};
 //!
 //! fn main() {
 //!     // VVV in practice provide a good random seed here VVV
-//!     let mut slicer = orouter_wireless::MessageSlicer::new(1234u64);
+//!     let mut slicer = orouter_wireless::MessageSlicer::new(1234u64, network::DEFAULT);
 //!     let messages = slicer
 //!         .slice(&[0xc0, 0xff, 0xee], MessageType::Data, 0x01).unwrap();
 //!     println!("slices = {:?}", messages);
@@ -73,18 +73,17 @@
 //! ```
 use crc16::{State, X_25};
 
-const MAGIC_BYTES: [u8; 2] = [0xAA, 0xCC];
-const MAGIC_BYTES_IDX: usize = 0;
-const MAGIC_BYTES_LENGTH: usize = MAGIC_BYTES.len();
+const NETWORK_BYTES_IDX: usize = 0;
+const NETWORK_BYTES_LENGTH: usize = network::DEFAULT.len();
 
-const HASH_RND_PART_IDX: usize = MAGIC_BYTES_IDX + MAGIC_BYTES_LENGTH; // 0 + 2 = 2
+const HASH_RND_PART_IDX: usize = NETWORK_BYTES_IDX + NETWORK_BYTES_LENGTH; // 0 + 2 = 2
 const HASH_RND_PART_LENGTH: usize = 3;
 
 const PREFIX_IDX: usize = HASH_RND_PART_IDX + HASH_RND_PART_LENGTH; // 2 + 3 = 5
 const PREFIX_LENGTH: usize = 3;
 
 /// HASH_* describe the full hash as used in [overline store](
-const HASH_IDX: usize = MAGIC_BYTES_IDX + MAGIC_BYTES_LENGTH; // 0 + 2 = 2
+const HASH_IDX: usize = NETWORK_BYTES_IDX + NETWORK_BYTES_LENGTH; // 0 + 2 = 2
 const HASH_LENGTH: usize = HASH_RND_PART_LENGTH + PREFIX_LENGTH;
 
 const PART_NUMBER_IDX: usize = HASH_IDX + HASH_LENGTH; // 2 + 6 = 8
@@ -102,7 +101,7 @@ const MSG_TYPE_LENGTH: usize = 1;
 const DATA_TYPE_IDX: usize = MSG_TYPE_IDX + MSG_TYPE_LENGTH; // 11 + 1 = 12;
 const DATA_TYPE_LENGTH: usize = 1;
 
-const HEADER_LENGTH: usize = MAGIC_BYTES_LENGTH
+const HEADER_LENGTH: usize = NETWORK_BYTES_LENGTH
     + HASH_LENGTH
     + PART_NUMBER_LENGTH
     + TOTAL_COUNT_LENGTH
@@ -114,6 +113,13 @@ const CRC_LENGTH: usize = 2;
 
 #[cfg(feature = "std")]
 mod lib_impl;
+
+pub mod network {
+    /// Specifies a wireless network
+    pub type Network = [u8; 2];
+    pub const DEFAULT: Network = [0xAA, 0xCC];
+    pub const TEST: Network = [0xCC, 0xAA];
+}
 
 #[cfg(feature = "std")]
 pub use lib_impl::*;
@@ -178,7 +184,7 @@ impl Into<u8> for MessageType {
 #[cfg_attr(feature = "no_std", derive(defmt::Format))]
 pub enum ValidationError {
     LessThanMinimalLength,
-    MagicBytesMismatch,
+    NetworkBytesMismatch,
     PartNumHigherThanTotalCount,
     IndicatedLenHigherThanMaxLen,
     IndicatedLenDifferentFromActualLen,
@@ -187,15 +193,15 @@ pub enum ValidationError {
 }
 
 /// validates if slice of bytes follow rules set by the protocol implementing in the crate
-pub fn is_valid_message(msg: &[u8]) -> Result<(), ValidationError> {
+pub fn is_valid_message(network: network::Network, msg: &[u8]) -> Result<(), ValidationError> {
     // HEADER + 1B data + 2B CRC16
     if msg.len() < HEADER_LENGTH + 1 + CRC_LENGTH {
         return Err(ValidationError::LessThanMinimalLength);
     }
 
-    let magic_bytes = &msg[MAGIC_BYTES_IDX..MAGIC_BYTES_LENGTH];
-    if magic_bytes != MAGIC_BYTES {
-        return Err(ValidationError::MagicBytesMismatch);
+    let network_actual = &msg[NETWORK_BYTES_IDX..NETWORK_BYTES_LENGTH];
+    if network_actual != network {
+        return Err(ValidationError::NetworkBytesMismatch);
     }
 
     let len = &msg[LENGTH_IDX];
@@ -223,6 +229,8 @@ pub fn is_valid_message(msg: &[u8]) -> Result<(), ValidationError> {
     let expected_crc = &msg[i..];
     let data = &msg[..i];
     let actual_crc = State::<X_25>::calculate(data);
+    let actual = actual_crc.to_be_bytes();
+    eprintln!("expected = {expected_crc:02x?}, actual = {actual:02x?}");
     if actual_crc.to_be_bytes() != expected_crc {
         return Err(ValidationError::IncorrectCrc(
             u16::from_be_bytes([expected_crc[0], expected_crc[1]]),
@@ -239,14 +247,17 @@ mod tests {
     use super::ValidationError;
 
     #[test]
-    fn test_is_valid_message_missing_magic_bytes() {
+    fn test_is_valid_message_missing_network_bytes() {
         //                             hash                             | num | tot | len | data
         assert_eq!(
-            Err(ValidationError::MagicBytesMismatch),
-            is_valid_message(&[
-                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                0x04, 0x01, 0x02
-            ])
+            Err(ValidationError::NetworkBytesMismatch),
+            is_valid_message(
+                crate::network::DEFAULT,
+                &[
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0x04, 0x01, 0x02
+                ]
+            )
         );
     }
 
@@ -255,7 +266,10 @@ mod tests {
         //                             prefix               | num | tot | len | data
         assert_eq!(
             Err(ValidationError::LessThanMinimalLength),
-            is_valid_message(&[0xff, 0xff, 0xff, 0xff, 0x04, 0x01, 0x02])
+            is_valid_message(
+                crate::network::DEFAULT,
+                &[0xff, 0xff, 0xff, 0xff, 0x04, 0x01, 0x02]
+            )
         );
     }
 
@@ -263,11 +277,14 @@ mod tests {
     fn test_is_valid_message_wrong_num() {
         assert_eq!(
             Err(ValidationError::PartNumHigherThanTotalCount),
-            is_valid_message(&[
-                // magic   | hash                             | num | tot | len | typ  |dtyp| data
-                0xAA, 0xCC, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02, 0x01, 0x02, 0x01, 0x01, 0xff,
-                0xff, 0x4b, 0x8c // crc16
-            ])
+            is_valid_message(
+                crate::network::DEFAULT,
+                &[
+                    // network | hash                             | num | tot | len | typ  |dtyp| data
+                    0xAA, 0xCC, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x02, 0x01, 0x02, 0x01, 0x01,
+                    0xff, 0xff, 0x4b, 0x8c // crc16
+                ]
+            )
         );
     }
 
@@ -275,11 +292,14 @@ mod tests {
     fn test_is_valid_message_wrong_len() {
         assert_eq!(
             Err(ValidationError::IndicatedLenDifferentFromActualLen),
-            is_valid_message(&[
-                // magic   | hash                             | num | tot | len | typ  |dtyp| data
-                0xAA, 0xCC, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01, 0xff,
-                0xff, 0xfe, 0x2e // crc16
-            ])
+            is_valid_message(
+                crate::network::DEFAULT,
+                &[
+                    // network | hash                             | num | tot | len | typ  |dtyp| data
+                    0xAA, 0xCC, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x01, 0x01, 0x01, 0x01, 0x01,
+                    0xff, 0xff, 0xfe, 0x2e // crc16
+                ],
+            )
         );
     }
 }

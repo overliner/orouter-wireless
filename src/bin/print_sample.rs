@@ -23,6 +23,10 @@ enum Commands {
         #[arg(short, long)]
         input_hex: bool,
 
+        /// network bytes (two hex encoded bytes, e.g. AACC)
+        #[arg(short, long)]
+        network: String,
+
         /// desired output encoding, if not provided, Debug impl is used
         #[arg(short, long)]
         output_encoding: Option<OutputEncoding>,
@@ -58,12 +62,17 @@ fn main() -> Result<()> {
         Commands::Slice {
             seed,
             input_hex,
+            network,
             output_encoding,
             data,
         } => {
             println!("original data = {:?}", data);
             let data = if *input_hex { todo!() } else { data.as_bytes() };
-            let mut slicer = orouter_wireless::MessageSlicer::new(*seed);
+            let network: [u8; 2] = hex::decode(network)?
+                .try_into()
+                .map_err(|_| anyhow::anyhow!("provided network string is not a valid"))?;
+
+            let mut slicer = orouter_wireless::MessageSlicer::new(*seed, network);
             let messages = slicer
                 .slice(data, orouter_wireless::MessageType::Data, 0x01)
                 .map_err(|e| anyhow::anyhow!("{:?}", e))

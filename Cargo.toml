@@ -2,9 +2,11 @@
 name = "orouter-wireless"
 description = "Implementation of wireless protocol for Overline network"
 version = "0.1.0"
-authors = ["Adam Kloboucnik <adam@klob.cz>"]
+authors = ["Overline developers dev@overline.network"]
 edition = "2021"
 license = "MIT"
+repository = "https://github.com/overliner/orouter-wireless"
+readme = "README.md"
 
 [[bin]]
 name = "print_sample"

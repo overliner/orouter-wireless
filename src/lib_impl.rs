@@ -44,7 +44,7 @@ impl P2pMessage {
 #[derive(Debug, PartialEq)]
 pub enum Error {
     PoolFull,
-    MalformedMessage,
+    MalformedMessage(crate::ValidationError),
     TooLong,
 }
 
@@ -60,10 +60,19 @@ pub enum Error {
 ///     ...
 /// }
 /// ```
-#[derive(Default)]
 pub struct MessagePool {
     /// Contains parts of the raw P2pMessage. Parts are stored without the prefix
     incomplete_message_map: HashMap<Prefix, Vec<P2pMessagePart>>,
+    network: crate::network::Network,
+}
+
+impl Default for MessagePool {
+    fn default() -> Self {
+        Self {
+            network: crate::network::DEFAULT,
+            incomplete_message_map: Default::default(),
+        }
+    }
 }
 
 impl MessagePool {
@@ -71,8 +80,8 @@ impl MessagePool {
     /// only) message, else it will return just the data of this message (stripped of all the now
     /// unnecessart protocol meta data)
     pub fn try_insert(&mut self, msg: P2pMessagePart) -> Result<Option<P2pMessage>, Error> {
-        if crate::is_valid_message(&msg).is_err() {
-            return Err(Error::MalformedMessage);
+        if let Err(e) = crate::is_valid_message(self.network, &msg) {
+            return Err(Error::MalformedMessage(e));
         }
 
         let part_num = &msg[crate::PART_NUMBER_IDX];
@@ -183,14 +192,16 @@ impl MessagePool {
 /// back from received parts (using [`crate::MessagePool`]).
 pub struct MessageSlicer {
     rng: SmallRng,
+    network: crate::network::Network,
 }
 
 impl MessageSlicer {
     /// `initial_seed` is a seed for rng for generating slice prefixes. Generate this using a
     /// system source of randomness
-    pub fn new(initial_seed: u64) -> Self {
+    pub fn new(initial_seed: u64, network: crate::network::Network) -> Self {
         MessageSlicer {
             rng: SmallRng::seed_from_u64(initial_seed),
+            network,
         }
     }
 
@@ -202,7 +213,7 @@ impl MessageSlicer {
         data_type: u8,
     ) -> Result<Vec<P2pMessagePart>, Error> {
         // FIXME implement correct slicing - add typ, data_type, asemble hash from rnd and prefix,
-        // add magic bytes
+        // add network bytes
         if data_bytes.len() > MAX_OVERLINE_MESSAGE_LENGTH {
             return Err(Error::TooLong);
         }
@@ -222,7 +233,7 @@ impl MessageSlicer {
             rnd_part.resize(3, 0);
             self.rng.fill(&mut rnd_part[0..3]);
             let mut p = P2pMessagePart::new();
-            p.extend_from_slice(&crate::MAGIC_BYTES);
+            p.extend_from_slice(&self.network);
             p.extend_from_slice(&rnd_part);
             p.extend_from_slice(&prefix);
             p.push(i as u8 + 1); // part_num
@@ -246,9 +257,12 @@ mod tests {
     use super::*;
     #[test]
     fn test_pool_try_insert_1_of_1() {
-        let mut p = MessagePool::default();
+        let mut p = MessagePool {
+            network: crate::network::DEFAULT,
+            ..Default::default()
+        };
         let msg1 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x01, 0x01, 0x03, 0x01, 0x01, 0xc0,
             0xff, 0xee, // crc
             0x31, 0x02,
@@ -267,9 +281,12 @@ mod tests {
 
     #[test]
     fn test_pool_try_insert_2nd_of_3() {
-        let mut p = MessagePool::default();
+        let mut p = MessagePool {
+            network: crate::network::DEFAULT,
+            ..Default::default()
+        };
         let msg1 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x03, 0x03, 0x01, 0x01, 0xc0,
             0xff, 0xee, // crc
             0x8c, 0x69,
@@ -281,15 +298,18 @@ mod tests {
 
     #[test]
     fn test_pool_try_insert_1_and_2_of_2() {
-        let mut p = MessagePool::default();
+        let mut p = MessagePool {
+            network: crate::network::DEFAULT,
+            ..Default::default()
+        };
         let msg1 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x01, 0x02, 0x03, 0x01, 0x01, 0xc0,
             0xff, 0xee, // crc
             0x99, 0x6c,
         ];
         let msg2 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x03, 0x01, 0x01, 0xc1,
             0xff, 0xee, // crc
             0x49, 0x60,
@@ -309,18 +329,21 @@ mod tests {
 
     #[test]
     fn test_pool_try_insert_2_and_1_of_2() {
-        let mut p = MessagePool::default();
+        let mut p = MessagePool {
+            network: crate::network::TEST,
+            ..Default::default()
+        };
         let msg1 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
-            0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x01, 0x02, 0x03, 0x01, 0x01, 0xc0,
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
+            0xCC, 0xAA, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x01, 0x02, 0x03, 0x01, 0x01, 0xc0,
             0xff, 0xee, // crc
-            0x99, 0x6c,
+            0x16, 0xba,
         ];
         let msg2 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
-            0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x03, 0x01, 0x01, 0xc1,
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
+            0xCC, 0xAA, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x03, 0x01, 0x01, 0xc1,
             0xff, 0xee, // crc
-            0x49, 0x60,
+            0xc6, 0xb6,
         ];
 
         assert_eq!(None, p.try_insert(msg2).unwrap());
@@ -341,14 +364,14 @@ mod tests {
         assert_eq!(p.size(), 0);
         // messages with 5 different prefixes
         let msg1 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x01, 0x02, 0x01, 0x01, 0x01, 0xc0,
             0xd6, 0x4e,
         ];
         assert_eq!(None, p.try_insert(msg1).unwrap());
         assert_eq!(p.size(), 1);
         let msg2 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x03, 0x03, 0x03, 0x02, 0x02, 0x03, 0x01, 0x01, 0xc1,
             0xff, 0xee, // crc
             0x7d, 0x2b,
@@ -356,7 +379,7 @@ mod tests {
         assert_eq!(None, p.try_insert(msg2).unwrap());
         assert_eq!(p.size(), 2);
         let msg1_2 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x02, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x02, 0x01, 0x01, 0x01, 0xd0,
             0x4d, 0x5c,
         ];
@@ -377,7 +400,7 @@ mod tests {
         let mut p = MessagePool::default();
         assert_eq!(p.size(), 0);
         let msg1 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x01, 0x02, 0x03, 0x01, 0x01, 0xc0,
             0xff, 0xee, // crc
             0x99, 0x6c,
@@ -385,7 +408,7 @@ mod tests {
         assert_eq!(None, p.try_insert(msg1).unwrap());
         assert_eq!(p.size(), 1);
         let msg2 = vec![
-            //   magic |prefix                             | num | tot | len |typ|  dtyp| data
+            // network |prefix                             | num | tot | len |typ|  dtyp| data
             0xAA, 0xCC, 0x01, 0x01, 0x01, 0x03, 0x03, 0x03, 0x02, 0x02, 0x03, 0x01, 0x01, 0xc1,
             0xff, 0xee, // crc
             0x7d, 0x2b,
@@ -405,14 +428,14 @@ mod tests {
 
     #[test]
     fn test_slicer_single_message() {
-        let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d);
+        let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d, crate::network::DEFAULT);
         let parts = s
             .slice(&[0xc0, 0xff, 0xee], MessageType::Data, 0x01)
             .unwrap();
         assert_eq!(parts.len(), 1);
         assert_eq!(
             parts[0],
-            //  magic b  | rnd part        |prefix            |p_n|   tot |part_l|typ|  dtyp|data ->
+            // network     | rnd part        |prefix            |p_n|   tot |part_l|typ|  dtyp|data ->
             &[
                 0xAA, 0xCC, 0x2a, 0x73, 0x5c, 0x3c, 0xce, 0x55, 0x01, 0x01, 0x03, 0x01, 0x01, 0xc0,
                 0xff, 0xee, // crc->
@@ -421,7 +444,10 @@ mod tests {
         );
 
         // try to insert if we get the same message
-        let mut p = MessagePool::default();
+        let mut p = MessagePool {
+            network: crate::network::DEFAULT,
+            ..Default::default()
+        };
         assert_eq!(
             Some(P2pMessage {
                 typ: MessageType::Data,
@@ -434,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_slicer_two_parts() {
-        let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d);
+        let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d, crate::network::TEST);
         let mut test_data_message = vec![];
         for b in core::iter::repeat(0xff)
             .take(crate::MAX_LORA_MESSAGE_SIZE - crate::HEADER_LENGTH - crate::CRC_LENGTH)
@@ -449,18 +475,18 @@ mod tests {
         // TODO test part 1
         assert_eq!(
             parts[1],
-            //  magic b  | rnd part        |prefix            |p_n|   tot |part_l|typ|  dtyp|data ->
+            //  network b  | rnd part        |prefix            |p_n|   tot |part_l|typ|  dtyp|data ->
             &[
-                0xAA, 0xCC, 0x2b, 0x7a, 0xeb, 0x3c, 0xce, 0x55, 0x02, 0x02, 0x03, 0x01, 0x01, 0xc0,
+                0xCC, 0xAA, 0x2b, 0x7a, 0xeb, 0x3c, 0xce, 0x55, 0x02, 0x02, 0x03, 0x01, 0x01, 0xc0,
                 0xff, 0xee, // crc->
-                0xd1, 0x72
+                0x5e, 0xa4
             ]
         );
     }
 
     #[test]
     fn test_slicer_too_long_data() {
-        let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d);
+        let mut s = MessageSlicer::new(0xdead_beef_cafe_d00d, crate::network::DEFAULT);
         let mut test_data_message = vec![];
         for b in core::iter::repeat(0xff).take(MAX_OVERLINE_MESSAGE_LENGTH + 1) {
             test_data_message.push(b);

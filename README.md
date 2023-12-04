@@ -16,26 +16,26 @@ eventually.
 [`crate::WirelessMessagePart`] represents raw chunk of data transmitted/received using oRouters
 radio chip. This crate implements and uses following scheme for message part:
 
-| name        | length in bytes | description                                                                               |
-|-------------|-----------------|-------------------------------------------------------------------------------------------|
-| magic bytes | 2               | magic bytes. always 0xAA 0xCC (will be configurable in next release)                      |
-| hash        | 6               | hash - first 3B are random, second 3B form a prefix grouping parts of the message to one  |
-| part_num    | 1               | part number 1, 2 or 3 (only 3-part messages supported)                                    |
-| total_count | 1               | total count of messages with this prefix                                                  |
-| length      | 1               | length of data                                                                            |
-| msg type    | 1               | overline message type                                                                     |
-| data type   | 1               | byte identifying data type, if previous field is data                                     |
-| data        | 1 - 240         | actual data                                                                               |
-| CRC16       | 2               | CRC16 of the whole message (header + data)                                                |
+| name          | length in bytes | description                                                                               |
+|---------------|-----------------|-------------------------------------------------------------------------------------------|
+| network bytes | 2               | network bytes. always 0xAA 0xCC (will be configurable in next release)                      |
+| hash          | 6               | hash - first 3B are random, second 3B form a prefix grouping parts of the message to one  |
+| part_num      | 1               | part number 1, 2 or 3 (only 3-part messages supported)                                    |
+| total_count   | 1               | total count of messages with this prefix                                                  |
+| length        | 1               | length of data                                                                            |
+| msg type      | 1               | overline message type                                                                     |
+| data type     | 1               | byte identifying data type, if previous field is data                                     |
+| data          | 1 - 240         | actual data                                                                               |
+| CRC16         | 2               | CRC16 of the whole message (header + data)                                                |
 
 Example of using a [`crate::MessageSlicer`] to split some data for wireless transmission:
 
 ```rust
-use orouter_wireless::{MessageSlicer, MessageType};
+use orouter_wireless::{MessageSlicer, MessageType, network};
 
 fn main() {
     // VVV in practice provide a good random seed here VVV
-    let mut slicer = orouter_wireless::MessageSlicer::new(1234u64);
+    let mut slicer = orouter_wireless::MessageSlicer::new(1234u64, network::DEFAULT);
     let messages = slicer
         .slice(&[0xc0, 0xff, 0xee], MessageType::Data, 0x01).unwrap();
     println!("slices = {:?}", messages);

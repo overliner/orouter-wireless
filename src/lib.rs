@@ -76,9 +76,11 @@ use crc16::{State, X_25};
 const NETWORK_BYTES_IDX: usize = 0;
 const NETWORK_BYTES_LENGTH: usize = network::DEFAULT.len();
 
+#[cfg_attr(feature = "no_std", allow(dead_code))]
 const HASH_RND_PART_IDX: usize = NETWORK_BYTES_IDX + NETWORK_BYTES_LENGTH; // 0 + 2 = 2
 const HASH_RND_PART_LENGTH: usize = 3;
 
+#[cfg_attr(feature = "no_std", allow(dead_code))]
 const PREFIX_IDX: usize = HASH_RND_PART_IDX + HASH_RND_PART_LENGTH; // 2 + 3 = 5
 const PREFIX_LENGTH: usize = 3;
 
@@ -98,6 +100,7 @@ const LENGTH_LENGTH: usize = 1;
 pub const MSG_TYPE_IDX: usize = LENGTH_IDX + LENGTH_LENGTH; // 10 + 1 = 11;
 const MSG_TYPE_LENGTH: usize = 1;
 
+#[cfg_attr(feature = "no_std", allow(dead_code))]
 const DATA_TYPE_IDX: usize = MSG_TYPE_IDX + MSG_TYPE_LENGTH; // 11 + 1 = 12;
 const DATA_TYPE_LENGTH: usize = 1;
 
@@ -229,8 +232,6 @@ pub fn is_valid_message(network: network::Network, msg: &[u8]) -> Result<(), Val
     let expected_crc = &msg[i..];
     let data = &msg[..i];
     let actual_crc = State::<X_25>::calculate(data);
-    let actual = actual_crc.to_be_bytes();
-    eprintln!("expected = {expected_crc:02x?}, actual = {actual:02x?}");
     if actual_crc.to_be_bytes() != expected_crc {
         return Err(ValidationError::IncorrectCrc(
             u16::from_be_bytes([expected_crc[0], expected_crc[1]]),

@@ -44,6 +44,9 @@ jobs:
     - name: test orouter-wireless
       run: cargo test
 
+    - name: build with no_std
+      run: cargo build --no-default-features --features=no_std
+
     - name: build print_sample utility binary
       run: cargo build --bin print_sample --features=__internal_binary
 
